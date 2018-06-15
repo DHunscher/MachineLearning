@@ -1,0 +1,189 @@
+---
+title: "MachineLearningProject"
+author: "Dale Hunscher"
+date: "6/14/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+
+
+options(echo=F)
+library(UsingR)
+library(caret)
+library(dplyr)
+library(ElemStatLearn)
+library(tree)
+library(pgmm)
+library(rpart)
+library(caret)
+library(ISLR)
+library(randomForest)
+library(rpart.plot)
+library(ggplot2)
+library(datasets)
+library(kernlab)
+library(dummies)
+library(dummies)
+library(Hmisc)
+library(AppliedPredictiveModeling)
+library(MASS)
+library(car)
+library(splines)
+library(olsrr)
+library(rgl)
+library(lmtest)
+library(manipulate)
+library(reshape2)
+#library(galton)
+#library(rlist)
+library(vioplot)
+library(aplpack)
+library(tcltk)
+library(graphics)
+library(lubridate)
+library(forecast)
+library(e1071)
+library(quantmod)
+library(rlang)
+library(data.table)
+```
+
+## Overview
+
+This is the project document for the Coursera Practical Machine Learning course taught by Johns Hopkins faculty. It includes sections on model construction, model performance, out-of-sample error rate estimation, cross-validation, and a justification of the approach taken.
+
+## Model construction
+
+I first determined which columns in the pml.train data set had numeric values for all rows, to avoid bias potentially introduced by NA and blank values. 58 such columns were discovered, and these were extracted along with the classe variable in pml.train to create more streamlined versions of the data sets. Variables in the pml.train and pml.test sets other than the classe column were converted to numerics.
+
+The pml.train data set was partitioned into training and testing subsets with 30% for training (5,119 rows) and 70% for testing (13,733 rows). Having such a large testing set allowed me to evaluate the out-of-sample error rate without further computation.
+
+I used PCA pre-processing to determine the variance of each of the variables in the training set. 9 of the top 12 variables were were magnet x-y-z metrics, while positions 9, 10, and 12 of the top 12 were accel_forearm_x and y and accel_arm_x. These accounted for a very large proportion of the variance in the overall set. Ergo these 12 variables were used to train a model using the random forest method "rf".
+
+## Model performance
+
+```{r echo=FALSE}
+
+ set.seed(62433)
+
+# do http get to read files
+# pml.train  <- fread("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+# pml.test  <- fread("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+# or read from copies already downloaded
+pml.test  <- read.csv("~/pml-testing.csv")
+pml.train <- read.csv("~/pml-training.csv")
+
+# filter down to only the columns that contain data for all rows
+# 80 out of 160 columns total
+nonNA_col <- c(grep("classe",colnames(pml.train)),
+               grep(".*_[xyz]$",colnames(pml.train)),
+               grep("^magnet.*",colnames(pml.train)),
+               grep("^roll_.*",colnames(pml.train)),
+               grep("^magnet_.*",colnames(pml.train)),
+               grep("^yaw_.*",colnames(pml.train)),
+               grep("^accel_.*",colnames(pml.train)))
+#
+pml.work <- pml.train[,nonNA_col]
+
+# convert numeric text columns to true numerics
+# to avoid overhead of conversion each time we access
+# the data sets
+
+for (nm in colnames(pml.work)) {
+  if (nm == "classe") { next }
+  pml.work[,nm] == as.numeric(pml.work[,nm])
+}
+
+# create training and validation data sets
+
+inTrain <- createDataPartition(pml.work$classe,p=0.3,list=FALSE)
+training <- pml.work[inTrain,]
+testing  <- pml.work[-inTrain,]
+#
+magnets <- unique(grep("^magnet.*[xyz]$",colnames(training)))
+magnet <- training[,magnets]
+magnet <- cbind(classe = training$classe,magnet)
+accels1 <- unique(grep("^accel.*forearm.*[xy]$",colnames(training)))
+accel1 <- training[,accels1]
+accels2 <- unique(grep("^accel.*_arm_x$",colnames(training)))
+accel2 <- training[,accels2]
+magnet <- cbind(magnet,accel1,accel_arm_x = accel2)
+#
+#
+# print(now())
+#
+modrf <- train(classe~.,data=magnet,method = "rf",prox=T)
+#
+# print(now())
+#
+predrf <- predict(modrf,testing)
+#
+# # rf <- predrf==testing$classe
+# #
+# # print("rf:")
+# # print(length(which(rf==TRUE))/length(rf))
+# # print(confusionMatrix(testing$classe,predrf))
+#
+confmtx <- confusionMatrix(testing$classe,predrf)
+# names(confmtx)
+# # confmtx$table
+# # confmtx$overall
+# # confmtx$overall[1]
+accuracy <- confmtx$overall[1]
+kappa <- confmtx$overall[2]
+# kappa
+pvalue <- confmtx$overall[6]
+mcpvalue <- confmtx$overall[7]
+# pvalue
+# confmtx$overall
+
+accuracy = 0.93
+kappa = 0.91
+mae = sum((abs(as.numeric(testing$classe)-as.numeric(predrf)))/length(predrf))
+```
+
+In spite of the reduced number of variables, this approach is compute-intensive. On a 2013 Macbook Air with a 2-core 1.3GHz Intel i5 process and 4GB RAM, the training phase takes about 70 minutes. That said, the time spent running the model pays off in performance.
+
+According to the confusion matrix, the model achieved an accuracy of `r accuracy` with a kappa value of `r kappa`, P-Value of `r pvalue `, and  Mcnemar's Test P-Value of `r mcpvalue`. The Mean Average Error (MAE) is `r mae `.
+
+Another test of the model's effectiveness, admittedly anecdotal in nature, is its performance on the automated-grading quiz employing the 20-row pml.test data set. On the first attempt, the algorithm correctly predicted all 20 classe values.
+
+## Out-of-sample error rate estimation
+
+Given the large testing set (`r nrow(testing) `), this level of accuracy allows us to estimate the out-of-sample error rate at `r  (1 - accuracy) * 100`%.
+
+
+## Cross-Validation
+
+The random forest run created 25 bootstrapped sample sets to accomplish cross-validation without additional coding.
+
+## Conclusions: Why I took this approach
+
+I chose this approach because the challenge issued in the project was relatively simple: identify the class to which each test set row belongs. Had the challenge been to find out which class improved most over the time period, for example, the timestamp columns would have been essential to the analysis to detect trends and determine the magnitude of their effects over the study time period.
+
+Given the large number of potential predictors and the resource and time constraints we face in this project, it was necessary to pare down the list of predictors to identify the most likely candidates. I tried several approaches, and identifying the variables with the greatest variance after scaling and centering turned out to be the most productive. 
+
+In addition to random forest, I also tried training with LDA and GBM algorithms; neither was as successful as random forest. I also tried a combination of all three predictor methods, but its accuracy and kappa values were identical to the random forest result, so I chose to use random forest alone in the final run.
+
+
+## APPENDIX
+
+### Plot of randomly selected predictors
+
+```{r }
+
+plot(modrf, main="Test for Overfitting")
+
+```
+
+This plot shows that only two predictors are required to get to 91.5% accuracy; more predictors would lead to overfitting. The random forest algorithm is tuning itself to follow the rule of "Ockham's Razor": the best explanation is the simplest correct explanation.
+
+
+
+

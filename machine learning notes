@@ -1,0 +1,51 @@
+machine learning notes
+
+Medical testing example:
+
+True positive = Sick people correctly diagnosed as sick
+
+False positive= Healthy people incorrectly identified as sick
+
+True negative = Healthy people correctly identified as healthy
+
+False negative = Sick people incorrectly identified as healthy.
+
+						actual
+				+				-
+
+prediction
+
++				TP				FP		|	all predicted positives
+
+
+_				FN				TN		|	all predicted negatives
+
+			=========================
+			all actual 		all actual
+			positives		negatives
+			
+sensitivity = TP / all actual positives  or TP/(TP+FN)
+specificity = TN / all actual negatives  or TN/(FP+TN)
+
+positive predictive value or PPV
+			= TP/ all predicted positives or TP/(TP+FP)
+			
+negative predictive value or NPV
+			= TN/ all predicted negatives or TN/(TN+FN)
+			
+accuracy = all true predictions / all predictions
+			or (TP + TN) / (TP+FP+TN+FN)
+			
+
+Preprocessing
+=============
+
+covariates == features == predictors
+
+dummyVars creates object that the predict function uses to change categorical to logical 
+
+nearZeroVar identifies which variables have enough variation to be useful as predictors
+
+** create covariates on test set using same methods/params as used to fit training set
+
+see Rmd on covariate creation - last slide has some links to look at

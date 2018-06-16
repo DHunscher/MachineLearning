@@ -51,6 +51,7 @@ library(e1071)
 library(quantmod)
 library(rlang)
 library(data.table)
+options(echo=T)
 ```
 
 ## Overview
@@ -143,10 +144,14 @@ mcpvalue <- confmtx$overall[7]
 # pvalue
 # confmtx$overall
 
-accuracy = 0.93
-kappa = 0.91
+# accuracy = 0.93
+# kappa = 0.91
 mae = sum((abs(as.numeric(testing$classe)-as.numeric(predrf)))/length(predrf))
+
+
+
 ```
+
 
 In spite of the reduced number of variables, this approach is compute-intensive. On a 2013 Macbook Air with a 2-core 1.3GHz Intel i5 process and 4GB RAM, the training phase takes about 70 minutes. That said, the time spent running the model pays off in performance.
 
@@ -178,12 +183,33 @@ In addition to random forest, I also tried training with LDA and GBM algorithms;
 
 ```{r }
 
-plot(modrf, main="Test for Overfitting")
+plot(modrf, main="Test for Overfitting",sub = "Number of randomly selected predictors")
 
 ```
 
 This plot shows that only two predictors are required to get to 91.5% accuracy; more predictors would lead to overfitting. The random forest algorithm is tuning itself to follow the rule of "Ockham's Razor": the best explanation is the simplest correct explanation.
 
 
+```{r }
+
+prc <- preProcess(training[,-1],method="pca",pcaComp = 12,center=T,scale=T)
+
+ss <- sort(prc$std/sum(prc$std),decreasing = T)
+
+par(las=2)
+sst <- sort(ss[1:12], decreasing = F)
+par(mar=c(5,10,4,2))
+barplot(as.numeric(sst), 
+        horiz=T, 
+        names.arg=names(sst[1:12]),
+        main = "Top 12 Variables", 
+        sub = "proportion of total variance, scaled")
 
 
+```
+
+This plot shows why I included the first 12 variables/predictors in the random forest model.
+
+All 9 magnet metrics are included, along with 3 others that ranked higher than the lowest magnet value.
+
+Together these cover only 66.4% of the total variance, but this set proved to be adequate to achieve 100% on the automated quiz. After achieving that score, I chose to focus on the report rather than trying for a higher level of accuracy.
